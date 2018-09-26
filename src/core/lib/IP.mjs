@@ -25,13 +25,16 @@ export function ipv4CidrRange(cidr, includeNetworkInfo, enumerateAddresses, allo
         cidrRange = parseInt(cidr[2], 10);
     let output = "";
 
-    if (cidrRange < 0 || cidrRange > 31) {
-        return "IPv4 CIDR must be less than 32";
+    if (cidrRange < 0 || cidrRange > 32) {
+        return "IPv4 CIDR must be less than or equal to 32";
     }
 
-    const mask = ~(0xFFFFFFFF >>> cidrRange),
-        ip1 = network & mask,
-        ip2 = ip1 | ~mask;
+    let mask = 0xFFFFFFFF, ip1 = network, ip2 = ip1;
+    if (cidrRange != 32) {
+        mask = ~(0xFFFFFFFF >>> cidrRange),
+            ip1 = network & mask,
+            ip2 = ip1 | ~mask;
+    }
 
     if (includeNetworkInfo) {
         output += "Network: " + ipv4ToStr(network) + "\n";
