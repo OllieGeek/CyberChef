@@ -58,6 +58,7 @@
     "js-to-mjs": "^0.2.0",
     "jsdoc-babel": "^0.4.0",
     "node-sass": "^4.9.2",
+    "npx": "^10.2.0",
     "postcss-css-variables": "^0.9.0",
     "postcss-import": "^12.0.0",
     "postcss-loader": "^2.1.6",
