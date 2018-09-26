@@ -1225,14 +1225,11 @@ class Magic {
             };
         }
 
-        if ((buf[0] === 0x0a && buf[1] === 0x0d && buf[2] === 0x0d && buf[3] === 0x0a && buf[4] === 0xd4 && buf[5] === 0xc3 && buf[6] === 0xb2 && buf[7] === 0xa1) ||
-            (buf[0] === 0x0a && buf[1] === 0x0d && buf[2] === 0x0d && buf[3] === 0x0a && buf[4] === 0xa1 && buf[5] === 0xb2 && buf[6] === 0xc3 && buf[7] === 0xd4) ||
-            (buf[0] === 0x0a && buf[1] === 0x0d && buf[2] === 0x0d && buf[3] === 0x0a && buf[4] === 0xa1 && buf[5] === 0xb2 && buf[6] === 0x3c && buf[7] === 0x4d) ||
-            (buf[0] === 0x0a && buf[1] === 0x0d && buf[2] === 0x0d && buf[3] === 0x0a && buf[4] === 0x4d && buf[5] === 0x3c && buf[6] === 0xb2 && buf[7] === 0xa1) ||
-            (buf[0] === 0xd4 && buf[1] === 0xc3 && buf[2] === 0xb2 && buf[3] === 0xa1) ||
-            (buf[0] === 0xa1 && buf[1] === 0xb2 && buf[2] === 0xc3 && buf[3] === 0xd4) ||
-            (buf[0] === 0xa1 && buf[1] === 0xb2 && buf[2] === 0x3c && buf[3] === 0x4d) ||
-            (buf[0] === 0x4d && buf[1] === 0x3c && buf[2] === 0xb2 && buf[3] === 0xa1)) {
+        const startPcap = buf[0] === 0x0a && buf[1] === 0x0d && buf[2] === 0x0d && buf[3] === 0x0a;
+        if ((startPcap && ((buf[4] === 0xd4 && buf[5] === 0xc3) || (buf[4] === 0x4d && buf[5] === 0x3c)) && buf[6] === 0xb2 && buf[7] === 0xa1) ||
+            (startPcap && buf[4] === 0xa1 && buf[5] === 0xb2 && ((buf[6] === 0xc3 && buf[7] === 0xd4) || (buf[6] === 0x3c && buf[7] === 0x4d))) ||
+            (((buf[0] === 0xd4 && buf[1] === 0xc3) || (buf[0] === 0x4d && buf[1] === 0x3c)) && buf[2] === 0xb2 && buf[3] === 0xa1) ||
+            (buf[0] === 0xa1 && buf[1] === 0xb2 && ((buf[2] === 0xc3 && buf[3] === 0xd4) || (buf[2] === 0x3c && buf[3] === 0x4d)))) {
             return {
                 ext: "pcap",
                 mime: "application/vnd.tcpdump.pcap"
