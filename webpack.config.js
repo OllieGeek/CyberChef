@@ -1,5 +1,6 @@
 const webpack = require("webpack");
-const ExtractTextPlugin = require("extract-text-webpack-plugin");
+const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const path = require("path");
 
 /**
  * Webpack configuration details for use with Grunt.
@@ -30,6 +31,7 @@ const banner = `/**
  * limitations under the License.
  */`;
 
+
 module.exports = {
     plugins: [
         new webpack.ProvidePlugin({
@@ -42,7 +44,12 @@ module.exports = {
             raw: true,
             entryOnly: true
         }),
-        new ExtractTextPlugin("styles.css")
+        new webpack.DefinePlugin({
+            "process.browser": "true"
+        }),
+        new MiniCssExtractPlugin({
+            filename: "assets/[name].css"
+        }),
     ],
     resolve: {
         alias: {
@@ -54,8 +61,13 @@ module.exports = {
             {
                 test: /\.m?js$/,
                 exclude: /node_modules\/(?!jsesc|crypto-api)/,
+                options: {
+                    configFile: path.resolve(__dirname, "babel.config.js"),
+                    cacheDirectory: true,
+                    compact: false
+                },
                 type: "javascript/auto",
-                loader: "babel-loader?compact=false"
+                loader: "babel-loader"
             },
             {
                 test: /forge.min.js$/,
@@ -67,31 +79,48 @@ module.exports = {
             },
             {
                 test: /\.css$/,
-                use: ExtractTextPlugin.extract({
-                    use: [
-                        { loader: "css-loader" },
-                        { loader: "postcss-loader" },
-                    ]
-                })
+                use: [
+                    {
+                        loader: MiniCssExtractPlugin.loader,
+                        options: {
+                            publicPath: "../"
+                        }
+                    },
+                    "css-loader",
+                    "postcss-loader",
+                ]
             },
             {
                 test: /\.scss$/,
-                use: ExtractTextPlugin.extract({
-                    use: [
-                        { loader: "css-loader" },
-                        { loader: "sass-loader" }
-                    ]
-                })
+                use: [
+                    {
+                        loader: MiniCssExtractPlugin.loader,
+                        options: {
+                            publicPath: "../"
+                        }
+                    },
+                    "css-loader",
+                    "sass-loader",
+                ]
             },
             {
                 test: /\.(ico|eot|ttf|woff|woff2)$/,
                 loader: "url-loader",
                 options: {
-                    limit: 10000
+                    limit: 10000,
+                    name: "[hash].[ext]",
+                    outputPath: "assets"
+                }
+            },
+            {
+                test: /\.svg$/,
+                loader: "svg-url-loader",
+                options: {
+                    encoding: "base64"
                 }
             },
             { // First party images are saved as files to be cached
-                test: /\.(png|jpg|gif|svg)$/,
+                test: /\.(png|jpg|gif)$/,
                 exclude: /node_modules/,
                 loader: "file-loader",
                 options: {
@@ -99,11 +128,13 @@ module.exports = {
                 }
             },
             { // Third party images are inlined
-                test: /\.(png|jpg|gif|svg)$/,
+                test: /\.(png|jpg|gif)$/,
                 exclude: /web\/static/,
                 loader: "url-loader",
                 options: {
-                    limit: 10000
+                    limit: 10000,
+                    name: "[hash].[ext]",
+                    outputPath: "assets"
                 }
             },
         ]
@@ -113,10 +144,18 @@ module.exports = {
         chunks: false,
         modules: false,
         entrypoints: false,
-        warningsFilter: [/source-map/, /dependency is an expression/],
+        warningsFilter: [
+            /source-map/,
+            /dependency is an expression/,
+            /export 'default'/,
+            /Can't resolve 'sodium'/
+        ],
     },
     node: {
-        fs: "empty"
+        fs: "empty",
+        "child_process": "empty",
+        net: "empty",
+        tls: "empty"
     },
     performance: {
         hints: false

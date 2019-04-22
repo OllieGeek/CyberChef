@@ -5,10 +5,10 @@
  */
 
 import utf8 from "utf8";
-import moment from "moment-timezone";
-import {fromBase64} from "./lib/Base64";
+import {fromBase64, toBase64} from "./lib/Base64";
 import {fromHex} from "./lib/Hex";
 import {fromDecimal} from "./lib/Decimal";
+import {fromBinary} from "./lib/Binary";
 
 
 /**
@@ -298,7 +298,7 @@ class Utils {
      * Accepts hex, Base64, UTF8 and Latin1 strings.
      *
      * @param {string} str
-     * @param {string} type - One of "Hex", "Decimal", "Base64", "UTF8" or "Latin1"
+     * @param {string} type - One of "Binary", "Hex", "Decimal", "Base64", "UTF8" or "Latin1"
      * @returns {byteArray}
      *
      * @example
@@ -313,6 +313,8 @@ class Utils {
      */
     static convertToByteArray(str, type) {
         switch (type.toLowerCase()) {
+            case "binary":
+                return fromBinary(str);
             case "hex":
                 return fromHex(str);
             case "decimal":
@@ -333,7 +335,7 @@ class Utils {
      * Accepts hex, Base64, UTF8 and Latin1 strings.
      *
      * @param {string} str
-     * @param {string} type - One of "Hex", "Decimal", "Base64", "UTF8" or "Latin1"
+     * @param {string} type - One of "Binary", "Hex", "Decimal", "Base64", "UTF8" or "Latin1"
      * @returns {string}
      *
      * @example
@@ -348,6 +350,8 @@ class Utils {
      */
     static convertToByteString(str, type) {
         switch (type.toLowerCase()) {
+            case "binary":
+                return Utils.byteArrayToChars(fromBinary(str));
             case "hex":
                 return Utils.byteArrayToChars(fromHex(str));
             case "decimal":
@@ -360,6 +364,61 @@ class Utils {
             default:
                 return str;
         }
+    }
+
+
+    /**
+     * Converts a string to an ArrayBuffer.
+     * Treats the string as UTF-8 if any values are over 255.
+     *
+     * @param {string} str
+     * @returns {ArrayBuffer}
+     *
+     * @example
+     * // returns [72,101,108,108,111]
+     * Utils.strToArrayBuffer("Hello");
+     *
+     * // returns [228,189,160,229,165,189]
+     * Utils.strToArrayBuffer("你好");
+     */
+    static strToArrayBuffer(str) {
+        const arr = new Uint8Array(str.length);
+        let i = str.length, b;
+        while (i--) {
+            b = str.charCodeAt(i);
+            arr[i] = b;
+            // If any of the bytes are over 255, read as UTF-8
+            if (b > 255) return Utils.strToUtf8ArrayBuffer(str);
+        }
+        return arr.buffer;
+    }
+
+
+    /**
+     * Converts a string to a UTF-8 ArrayBuffer.
+     *
+     * @param {string} str
+     * @returns {ArrayBuffer}
+     *
+     * @example
+     * // returns [72,101,108,108,111]
+     * Utils.strToUtf8ArrayBuffer("Hello");
+     *
+     * // returns [228,189,160,229,165,189]
+     * Utils.strToUtf8ArrayBuffer("你好");
+     */
+    static strToUtf8ArrayBuffer(str) {
+        const utf8Str = utf8.encode(str);
+
+        if (str.length !== utf8Str.length) {
+            if (ENVIRONMENT_IS_WORKER()) {
+                self.setOption("attemptHighlight", false);
+            } else if (ENVIRONMENT_IS_WEB()) {
+                window.app.options.attemptHighlight = false;
+            }
+        }
+
+        return Utils.strToArrayBuffer(utf8Str);
     }
 
 
@@ -455,7 +514,7 @@ class Utils {
     /**
      * Attempts to convert a byte array to a UTF-8 string.
      *
-     * @param {byteArray} byteArray
+     * @param {byteArray|Uint8Array} byteArray
      * @returns {string}
      *
      * @example
@@ -501,6 +560,7 @@ class Utils {
     static byteArrayToChars(byteArray) {
         if (!byteArray) return "";
         let str = "";
+        // String concatenation appears to be faster than an array join
         for (let i = 0; i < byteArray.length;) {
             str += String.fromCharCode(byteArray[i++]);
         }
@@ -520,8 +580,8 @@ class Utils {
      * Utils.arrayBufferToStr(Uint8Array.from([104,101,108,108,111]).buffer);
      */
     static arrayBufferToStr(arrayBuffer, utf8=true) {
-        const byteArray = Array.prototype.slice.call(new Uint8Array(arrayBuffer));
-        return utf8 ? Utils.byteArrayToUtf8(byteArray) : Utils.byteArrayToChars(byteArray);
+        const arr = new Uint8Array(arrayBuffer);
+        return utf8 ? Utils.byteArrayToUtf8(arr) : Utils.byteArrayToChars(arr);
     }
 
 
@@ -555,8 +615,6 @@ class Utils {
             if (renderNext) {
                 cell += b;
                 renderNext = false;
-            } else if (b === "\\") {
-                renderNext = true;
             } else if (b === "\"" && !inString) {
                 inString = true;
             } else if (b === "\"" && inString) {
@@ -570,6 +628,10 @@ class Utils {
                 cell = "";
                 lines.push(line);
                 line = [];
+                // Skip next byte if it is also a line delim (e.g. \r\n)
+                if (lineDelims.indexOf(next) >= 0 && next !== b) {
+                    i++;
+                }
             } else {
                 cell += b;
             }
@@ -791,38 +853,6 @@ class Utils {
 
 
     /**
-     * Expresses a number of milliseconds in a human readable format.
-     *
-     * Range                        | Sample Output
-     * -----------------------------|-------------------------------
-     * 0 to 45 seconds              | a few seconds ago
-     * 45 to 90 seconds             | a minute ago
-     * 90 seconds to 45 minutes     | 2 minutes ago ... 45 minutes ago
-     * 45 to 90 minutes             | an hour ago
-     * 90 minutes to 22 hours       | 2 hours ago ... 22 hours ago
-     * 22 to 36 hours               | a day ago
-     * 36 hours to 25 days          | 2 days ago ... 25 days ago
-     * 25 to 45 days                | a month ago
-     * 45 to 345 days               | 2 months ago ... 11 months ago
-     * 345 to 545 days (1.5 years)  | a year ago
-     * 546 days+                    | 2 years ago ... 20 years ago
-     *
-     * @param {number} ms
-     * @returns {string}
-     *
-     * @example
-     * // returns "3 minutes"
-     * Utils.fuzzyTime(152435);
-     *
-     * // returns "5 days"
-     * Utils.fuzzyTime(456851321);
-     */
-    static fuzzyTime(ms) {
-        return moment.duration(ms, "milliseconds").humanize();
-    }
-
-
-    /**
      * Formats a list of files or directories.
      *
      * @author tlwr [toby@toby.codes]
@@ -843,12 +873,24 @@ class Utils {
             return html;
         };
 
+        const formatContent = function (buff, type) {
+            if (type.startsWith("image")) {
+                let dataURI = "data:";
+                dataURI += type + ";";
+                dataURI += "base64," + toBase64(buff);
+                return "<img style='max-width: 100%;' src='" + dataURI + "'>";
+            } else {
+                return `<pre>${Utils.escapeHtml(Utils.arrayBufferToStr(buff.buffer))}</pre>`;
+            }
+        };
+
         const formatFile = async function(file, i) {
             const buff = await Utils.readFile(file);
             const blob = new Blob(
                 [buff],
-                {type: "octet/stream"}
+                {type: file.type || "octet/stream"}
             );
+            const blobURL = URL.createObjectURL(blob);
 
             const html = `<div class='card' style='white-space: normal;'>
                     <div class='card-header' id='heading${i}'>
@@ -863,16 +905,25 @@ class Utils {
                             <span class='float-right' style="margin-top: -3px">
                                 ${file.size.toLocaleString()} bytes
                                 <a title="Download ${Utils.escapeHtml(file.name)}"
-                                    href='${URL.createObjectURL(blob)}'
-                                    download='${Utils.escapeHtml(file.name)}'>
+                                    href="${blobURL}"
+                                    download="${Utils.escapeHtml(file.name)}"
+                                    data-toggle="tooltip">
                                     <i class="material-icons" style="vertical-align: bottom">save</i>
+                                </a>
+                                <a title="Move to input"
+                                    href="#"
+                                    blob-url="${blobURL}"
+                                    file-name="${Utils.escapeHtml(file.name)}"
+                                    class="extract-file"
+                                    data-toggle="tooltip">
+                                    <i class="material-icons" style="vertical-align: bottom">open_in_browser</i>
                                 </a>
                             </span>
                         </h6>
                     </div>
                     <div id='collapse${i}' class='collapse' aria-labelledby='heading${i}' data-parent="#files">
                         <div class='card-body'>
-                            <pre>${Utils.escapeHtml(Utils.arrayBufferToStr(buff.buffer))}</pre>
+                            ${formatContent(buff, file.type)}
                         </div>
                     </div>
                 </div>`;
@@ -1028,9 +1079,11 @@ class Utils {
     static charRep(token) {
         return {
             "Space":         " ",
+            "Percent":       "%",
             "Comma":         ",",
             "Semi-colon":    ";",
             "Colon":         ":",
+            "Tab":           "\t",
             "Line feed":     "\n",
             "CRLF":          "\r\n",
             "Forward slash": "/",
@@ -1052,6 +1105,7 @@ class Utils {
     static regexRep(token) {
         return {
             "Space":         /\s+/g,
+            "Percent":       /%/g,
             "Comma":         /,/g,
             "Semi-colon":    /;/g,
             "Colon":         /:/g,
@@ -1176,6 +1230,21 @@ Array.prototype.equals = function(other) {
 String.prototype.count = function(chr) {
     return this.split(chr).length - 1;
 };
+
+
+/**
+ * Wrapper for self.sendStatusMessage to handle different environments.
+ *
+ * @param {string} msg
+ */
+export function sendStatusMessage(msg) {
+    if (ENVIRONMENT_IS_WORKER())
+        self.sendStatusMessage(msg);
+    else if (ENVIRONMENT_IS_WEB())
+        app.alert(msg, 10000);
+    else if (ENVIRONMENT_IS_NODE())
+        log.debug(msg);
+}
 
 
 /*
